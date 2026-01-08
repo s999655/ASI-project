@@ -1,0 +1,14 @@
+# Virtual environments
+pycaret-env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Editor / OS
+.vscode/
+.DS_Store
