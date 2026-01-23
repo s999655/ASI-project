@@ -1,0 +1,79 @@
+---
+- name: Configure environment
+  hosts: prod
+  become: true
+  tasks:
+    - name: Install pip on Alpine
+      ansible.builtin.package:
+        name: py3-pip
+        state: present
+      when: ansible_facts['os_family'] | lower == 'alpine'
+
+    - name: Install modules dependencies
+      ansible.builtin.package:
+        name: py3-requests
+        state: present
+      when: ansible_facts['os_family'] | lower == 'alpine'
+
+- name: ASI Employee Attrition Application Deployment
+  hosts: prod
+  vars:
+    image_name: employee-attrition-app:latest
+    image_path: /tmp/employee-attrition-app.tar
+    container_name: employee-attrition-app
+    app_port: 8000
+  tasks:
+    - name: Dump a tarball with the image
+      community.docker.docker_image_export:
+        name: "{{ image_name }}"
+        path: "{{ image_path }}"
+      run_once: true
+      delegate_to: localhost
+
+    - name: Copy a tarball with the image
+      ansible.builtin.copy:
+        src: "{{ image_path }}"
+        dest: "{{ image_path }}"
+        mode: u=rw,g=r,o=r
+
+    - name: Load all image(s) from the given tar file
+      community.docker.docker_image_load:
+        path: "{{ image_path }}"
+      become: true
+
+    - name: Ensure models directory exists in container
+      ansible.builtin.file:
+        path: /var/lib/employee-attrition/models
+        state: directory
+        mode: '0755'
+      become: true
+
+    - name: Ensure data directory exists in container
+      ansible.builtin.file:
+        path: /var/lib/employee-attrition/data
+        state: directory
+        mode: '0755'
+      become: true
+
+    - name: Start Employee Attrition app
+      community.docker.docker_container:
+        name: employee-attrition-app
+        image: "{{ image_name }}"
+        state: started
+        recreate: true
+        ports:
+          - "{{ app_port }}:8000"
+        volumes:
+          - "{{ playbook_dir }}/models:/app/models"
+          - "{{ playbook_dir }}/data:/app/data"
+        restart_policy: unless-stopped
+      become: true
+
+    #- name: Wait for application to be ready
+    #  ansible.builtin.uri:
+    #    url: "http://localhost:{{ app_port }}/"
+    #    status_code: 200
+    #  register: result
+    #  until: result.status == 200
+    #  retries: 10
+    #  delay: 3
